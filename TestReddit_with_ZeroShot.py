@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
 from transformers import pipeline
+import time
 
 # Reddit-API einrichten
 reddit = praw.Reddit(
@@ -14,20 +15,29 @@ reddit = praw.Reddit(
 # Zero-Shot-Klassifikationsmodell laden
 classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 
-# Funktion: Abrufen von Posts aus einem Subreddit
-def get_reddit_posts(subreddit_name, keyword, limit=100):
+# Funktion: Abrufen von Posts aus einem Subreddit mit Paginierung
+def get_reddit_posts(subreddit_name, keyword, max_posts=5000):
     subreddit = reddit.subreddit(subreddit_name)
     posts = []
-    for submission in subreddit.search(keyword, limit=limit):
-        posts.append({
-            "title": submission.title,
-            "selftext": submission.selftext,
-            "score": submission.score,
-            "url": submission.url,
-            "num_comments": submission.num_comments,
-            "created": submission.created,
-            "author": str(submission.author)
-        })
+    last_post = None
+
+    while len(posts) < max_posts:
+        for submission in subreddit.search(keyword, limit=1000, params={'after': last_post}):
+            posts.append({
+                "title": submission.title,
+                "selftext": submission.selftext,
+                "score": submission.score,
+                "url": submission.url,
+                "num_comments": submission.num_comments,
+                "created": submission.created,
+                "author": str(submission.author)
+            })
+            last_post = submission.id  # Speichert den ID des letzten Posts für die nächste Abfrage
+
+            if len(posts) >= max_posts:
+                break
+        time.sleep(1)  # Pause, um API-Limits zu vermeiden
+
     df = pd.DataFrame(posts)
     return df
 
@@ -43,14 +53,14 @@ def classify_post(text, labels):
 # Subreddit-Liste und Einstellungen
 subreddit_list = ["politics", "PoliticalDiscussion", "Conservative", "democrats", "republican"]
 keyword = "election"
-limit = 100
+max_posts = 5000  # Maximale Anzahl an Posts pro Subreddit
 
 # Abrufen der Posts aus mehreren Subreddits
 all_posts = []
 for subreddit in subreddit_list:
     print(f"Abrufen von Posts aus r/{subreddit}...")
     try:
-        df = get_reddit_posts(subreddit, keyword, limit)
+        df = get_reddit_posts(subreddit, keyword, max_posts=max_posts)
         all_posts.append(df)
     except Exception as e:
         print(f"Fehler beim Abrufen von r/{subreddit}: {e}")
