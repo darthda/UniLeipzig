@@ -370,6 +370,41 @@ print(f"Accuracy (L1-Regularisierung): {accuracy_score(y_test, y_pred_l1):.4f}")
 print("\nKlassifikationsbericht (L1):")
 print(classification_report(y_test, y_pred_l1, target_names=["pro-Harris", "pro-Trump"]))
 
+# Berechnung und Ausgabe der Testmetriken
+def calculate_metrics(y_test, y_pred, y_pred_proba):
+    precision = classification_report(y_test, y_pred, target_names=["pro-Harris", "pro-Trump"], output_dict=True)["pro-Trump"]["precision"]
+    recall = classification_report(y_test, y_pred, target_names=["pro-Harris", "pro-Trump"], output_dict=True)["pro-Trump"]["recall"]
+    f1 = classification_report(y_test, y_pred, target_names=["pro-Harris", "pro-Trump"], output_dict=True)["pro-Trump"]["f1-score"]
+    auroc = roc_auc_score(y_test, y_pred_proba[:, 1])
+    precision_values, recall_values, _ = precision_recall_curve(y_test, y_pred_proba[:, 1])
+    auprc = auc(recall_values, precision_values)
+    
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print(f"F1-Score: {f1:.4f}")
+    print(f"AUROC: {auroc:.4f}")
+    print(f"AUPRC: {auprc:.4f}")
+    
+    # Plot AUROC
+    fpr, tpr, _ = roc_curve(y_test, y_pred_proba[:, 1])
+    plt.figure(figsize=(10, 6))
+    plt.plot(fpr, tpr, label=f"AUROC = {auroc:.4f}")
+    plt.plot([0, 1], [0, 1], linestyle='--', color='gray')
+    plt.title("ROC Curve")
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.legend()
+    plt.show()
+    
+    # Plot AUPRC
+    plt.figure(figsize=(10, 6))
+    plt.plot(recall_values, precision_values, label=f"AUPRC = {auprc:.4f}")
+    plt.title("Precision-Recall Curve")
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.legend()
+    plt.show()
+
 # Visualisierung der Koeffizienten
 coefficients = m_l1.coef_[0]
 features = vectorizer.get_feature_names_out()
