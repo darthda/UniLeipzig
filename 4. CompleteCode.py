@@ -316,6 +316,92 @@ batch_size = 16
 classified_dataset = dataset.map(classify_batch, batched=True, batch_size=batch_size)
 classified_posts = classified_dataset.to_pandas()
 
+# Zero SHot Classifier vergleichen
+
+# Zweites Zero-Shot-Klassifikationsmodell hinzufügen
+classifier2 = pipeline("zero-shot-classification", model="joeddav/xlm-roberta-large-xnli", device=device)
+
+# Funktion: Klassifikation von Posts mit einem Zero-Shot-Classifier
+def classify_posts_with_model(posts, classifier_model):
+    """
+    Klassifiziert eine Liste von Posts mit einem Zero-Shot-Classifier.
+
+    Args:
+        posts (pd.DataFrame): DataFrame mit Reddit-Posts.
+        classifier_model: HuggingFace Zero-Shot-Classifier Pipeline.
+
+    Returns:
+        pd.DataFrame: DataFrame mit Klassifikationsergebnissen.
+    """
+    results = classifier_model(posts["cleaned_text"].tolist(), candidate_labels=["pro-Trump", "pro-Harris", "neutral"])
+    posts["classification"] = [res["labels"][0] for res in results]
+    posts["confidence"] = [res["scores"][0] for res in results]
+    return posts
+
+# Klassifikation mit dem ersten Modell (facebook/bart-large-mnli)
+classified_posts_model1 = classify_posts_with_model(classified_posts.copy(), classifier)
+
+# Klassifikation mit dem zweiten Modell (joeddav/xlm-roberta-large-xnli)
+classified_posts_model2 = classify_posts_with_model(classified_posts.copy(), classifier2)
+
+# Funktion: Vergleich der Klassifikationen
+from sklearn.metrics import cohen_kappa_score, accuracy_score
+
+def compare_classification_results(df1, df2):
+    """
+    Vergleicht die Klassifikationsergebnisse zweier Zero-Shot-Classifier.
+
+    Args:
+        df1 (pd.DataFrame): DataFrame mit Klassifikationsergebnissen des ersten Classifiers.
+                            Muss eine Spalte "classification" enthalten.
+        df2 (pd.DataFrame): DataFrame mit Klassifikationsergebnissen des zweiten Classifiers.
+                            Muss eine Spalte "classification" enthalten.
+
+    Returns:
+        dict: Dictionary mit Vergleichsmesswerten (Accuracy und Cohen's Kappa).
+    """
+    if "classification" not in df1.columns or "classification" not in df2.columns:
+        raise ValueError("Beide DataFrames müssen eine Spalte 'classification' enthalten.")
+    
+    # Sicherstellen, dass die DataFrames gleiche Länge haben
+    if len(df1) != len(df2):
+        raise ValueError("Beide DataFrames müssen die gleiche Anzahl von Einträgen haben.")
+    
+    # Klassifikationen extrahieren
+    labels1 = df1["classification"].values
+    labels2 = df2["classification"].values
+
+    # Berechnung der Vergleichsmetriken
+    accuracy = accuracy_score(labels1, labels2)
+    kappa = cohen_kappa_score(labels1, labels2)
+
+    # Ergebnisse zurückgeben
+    return {
+        "accuracy": accuracy,
+        "cohen_kappa": kappa
+    }
+
+# Vergleich der Ergebnisse
+comparison_results = compare_classification_results(classified_posts_model1, classified_posts_model2)
+
+# Ergebnisse ausgeben
+print(f"Accuracy: {comparison_results['accuracy']:.4f}")
+print(f"Cohen's Kappa: {comparison_results['cohen_kappa']:.4f}")
+
+# Speicherung der Klassifikationsergebnisse
+classified_posts_model1.to_csv("classified_posts_model1.csv", index=False)
+classified_posts_model2.to_csv("classified_posts_model2.csv", index=False)
+
+# Verteilung der Klassifikationen visualisieren
+plt.figure(figsize=(10, 6))
+classified_posts_model1["classification"].value_counts().plot(kind="bar", alpha=0.7, label="Model 1")
+classified_posts_model2["classification"].value_counts().plot(kind="bar", alpha=0.7, label="Model 2")
+plt.title("Vergleich der Klassifikationsverteilungen")
+plt.xlabel("Klassifikation")
+plt.ylabel("Anzahl der Posts")
+plt.legend()
+plt.show()
+
 # Schritt: Logistische Regression implementieren
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import CountVectorizer
